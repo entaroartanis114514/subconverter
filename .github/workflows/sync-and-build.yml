@@ -1,0 +1,62 @@
+name: Sync Upstream & Build Docker Image
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write       
+  workflows: write
+
+jobs:
+  sync-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Sync upstream
+        id: sync
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+
+          git remote add upstream https://github.com/asdlokj1qpi233/subconverter.git || true
+          git fetch upstream
+
+          BEHIND_COUNT=$(git rev-list --count HEAD..upstream/master)
+          echo "落后上游的提交数: $BEHIND_COUNT"
+
+          if [ "$BEHIND_COUNT" -gt 0 ]; then
+            echo "检测到上游有新提交，开始合并..."
+            git merge upstream/master --no-edit
+            git push origin HEAD
+            echo "updated=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "当前已是最新，无需同步。"
+            echo "updated=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "head_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Login to GitHub Container Registry
+        if: steps.sync.outputs.updated == 'true' || github.event_name == 'workflow_dispatch'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        if: steps.sync.outputs.updated == 'true' || github.event_name == 'workflow_dispatch'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.local
+          push: true
+          tags: |
+            ghcr.io/entaroartanis114514/subconverter:latest
