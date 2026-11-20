@@ -7,8 +7,7 @@ on:
 
 permissions:
   contents: write
-  packages: write       
-  workflows: write
+  packages: write
 
 jobs:
   sync-and-build:
@@ -60,3 +59,4 @@ jobs:
           push: true
           tags: |
             ghcr.io/entaroartanis114514/subconverter:latest
+            ghcr.io/entaroartanis114514/subconverter:${{ steps.sync.outputs.head_sha }}
